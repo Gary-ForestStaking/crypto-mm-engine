@@ -1,5 +1,6 @@
 # Professional High-Frequency Market Making Engine
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 A production-grade, event-driven cryptocurrency market making and arbitrage engine designed for Binance Futures. Built in Python using `asyncio` and `pydantic`, this system features a completely decoupled, modular architecture with real-time quantitative signal derivation, advanced expected-value (EV) bounds mathematical modeling, and enterprise-grade telemetry powered by ClickHouse and Grafana.
 
 ## 🚀 Key Features
@@ -17,7 +18,7 @@ A production-grade, event-driven cryptocurrency market making and arbitrage engi
 * **Institutional Grafana Dashboards:** Directly provisioned Grafana templates mapping deep PnL constraints, exact executed EV bounds, and predictive signal Decile Monotonicity Histograms natively through ClickHouse arrays.
 
 ## 🛠 Tech Stack
-* **Core:** Python 3.9+, `asyncio`, `aiohttp`, `websockets`
+* **Core:** Requires Python 3.12.x, `asyncio`, `aiohttp`, `websockets`
 * **Data Modeling:** `pydantic`
 * **Quantitative Computing:** `numpy`, `scipy`
 * **Storage & Analytics:** ClickHouse (`clickhouse-connect`)

@@ -2,6 +2,10 @@ import asyncio
 import logging
 import signal
 import sys
+
+if sys.version_info < (3, 12):
+    raise RuntimeError("Python 3.12+ required.")
+
 from bus.event_bus import EventBus
 from config.settings import settings
 from feed.binance_ws import BinanceFuturesFeed
