@@ -10,6 +10,7 @@ from risk.manager import RiskManager
 from execution.executor import BinanceExecutor
 from persistence.clickhouse_writer import ClickHouseWriter
 from metrics.tracker import MetricsTracker
+from strategy.signal_validation import SignalValidationModule
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +34,8 @@ async def main():
     executor = BinanceExecutor(bus, risk_manager=risk)
     persistence = ClickHouseWriter(bus)
     metrics = MetricsTracker(bus)
+    validation = SignalValidationModule(bus)
+    validation.register()
     
     # Start Background Tasks
     await bus.start()

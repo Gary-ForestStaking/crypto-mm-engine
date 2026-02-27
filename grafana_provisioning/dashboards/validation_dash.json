@@ -1,0 +1,215 @@
+{
+    "id": null,
+    "uid": "validation_dash",
+    "title": "Signal Validation & Attribution",
+    "tags": [
+        "strategy",
+        "validation"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "5s",
+    "panels": [
+        {
+            "type": "timeseries",
+            "title": "Forward Return Correlation (250ms)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, signal_name, avg(correlation) AS corr FROM signal_forward_stats WHERE $__timeFilter(ts) AND horizon_ms = 250 GROUP BY time, signal_name ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line"
+                    },
+                    "unit": "none"
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Rolling Information Coefficient (Spearman Rank)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, signal_name, avg(rolling_ic) AS ic FROM signal_ic_stats WHERE $__timeFilter(ts) AND horizon_ms = 250 GROUP BY time, signal_name ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line"
+                    },
+                    "unit": "none"
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Rolling OLS Signal Weights (250ms Forward Return Regression)",
+            "gridPos": {
+                "h": 8,
+                "w": 16,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, avg(sig_imb_coef) AS sig_imb FROM signal_regression_stats WHERE $__timeFilter(ts) GROUP BY time ORDER BY time"
+                },
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, avg(sig_slope_coef) AS sig_slope FROM signal_regression_stats WHERE $__timeFilter(ts) GROUP BY time ORDER BY time"
+                },
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, avg(sig_tfi_coef) AS sig_tfi FROM signal_regression_stats WHERE $__timeFilter(ts) GROUP BY time ORDER BY time"
+                },
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, avg(sig_bid_adv_coef) AS sig_bid_adv FROM signal_regression_stats WHERE $__timeFilter(ts) GROUP BY time ORDER BY time"
+                },
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, avg(sig_ask_adv_coef) AS sig_ask_adv FROM signal_regression_stats WHERE $__timeFilter(ts) GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line"
+                    },
+                    "unit": "none"
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "T-Stats (Absolute > 2.0 = Significant)",
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, avg(abs(sig_imb_t)) AS sig_imb FROM signal_regression_stats WHERE $__timeFilter(ts) GROUP BY time ORDER BY time"
+                },
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) as time, avg(abs(sig_slope_t)) AS sig_slope FROM signal_regression_stats WHERE $__timeFilter(ts) GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars"
+                    },
+                    "unit": "none"
+                }
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "Realized PnL vs Composite Signal Deciles",
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "\n    WITH deciles AS (\n        SELECT \n            quantilesExact(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)(sig_composite) AS b\n        FROM fills_metrics\n        WHERE symbol = '$symbol' AND $__timeFilter(ts) AND sig_composite != 0\n    )\n    SELECT\n        multiIf(\n            sig_composite < b[1], 'D1',\n            sig_composite < b[2], 'D2',\n            sig_composite < b[3], 'D3',\n            sig_composite < b[4], 'D4',\n            sig_composite < b[5], 'D5',\n            sig_composite < b[6], 'D6',\n            sig_composite < b[7], 'D7',\n            sig_composite < b[8], 'D8',\n            sig_composite < b[9], 'D9',\n            'D10'\n        ) AS bucket,\n        avg(realized_pnl_usd) AS `Mean PnL`,\n        sum(realized_pnl_usd) AS `Total PnL`\n    FROM fills_metrics, deciles\n    WHERE symbol = '$symbol' AND $__timeFilter(ts) AND sig_composite != 0\n    GROUP BY bucket ORDER BY bucket\n    "
+                }
+            ],
+            "options": {
+                "xField": "bucket"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "Realized PnL vs Imbalance Signal Deciles",
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "\n    WITH deciles AS (\n        SELECT \n            quantilesExact(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)(sig_imb) AS b\n        FROM fills_metrics\n        WHERE symbol = '$symbol' AND $__timeFilter(ts) AND sig_imb != 0\n    )\n    SELECT\n        multiIf(\n            sig_imb < b[1], 'D1',\n            sig_imb < b[2], 'D2',\n            sig_imb < b[3], 'D3',\n            sig_imb < b[4], 'D4',\n            sig_imb < b[5], 'D5',\n            sig_imb < b[6], 'D6',\n            sig_imb < b[7], 'D7',\n            sig_imb < b[8], 'D8',\n            sig_imb < b[9], 'D9',\n            'D10'\n        ) AS bucket,\n        avg(realized_pnl_usd) AS `Mean PnL`,\n        sum(realized_pnl_usd) AS `Total PnL`\n    FROM fills_metrics, deciles\n    WHERE symbol = '$symbol' AND $__timeFilter(ts) AND sig_imb != 0\n    GROUP BY bucket ORDER BY bucket\n    "
+                }
+            ],
+            "options": {
+                "xField": "bucket"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "Realized PnL vs Trade Flow Signal Deciles",
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "\n    WITH deciles AS (\n        SELECT \n            quantilesExact(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)(sig_tfi) AS b\n        FROM fills_metrics\n        WHERE symbol = '$symbol' AND $__timeFilter(ts) AND sig_tfi != 0\n    )\n    SELECT\n        multiIf(\n            sig_tfi < b[1], 'D1',\n            sig_tfi < b[2], 'D2',\n            sig_tfi < b[3], 'D3',\n            sig_tfi < b[4], 'D4',\n            sig_tfi < b[5], 'D5',\n            sig_tfi < b[6], 'D6',\n            sig_tfi < b[7], 'D7',\n            sig_tfi < b[8], 'D8',\n            sig_tfi < b[9], 'D9',\n            'D10'\n        ) AS bucket,\n        avg(realized_pnl_usd) AS `Mean PnL`,\n        sum(realized_pnl_usd) AS `Total PnL`\n    FROM fills_metrics, deciles\n    WHERE symbol = '$symbol' AND $__timeFilter(ts) AND sig_tfi != 0\n    GROUP BY bucket ORDER BY bucket\n    "
+                }
+            ],
+            "options": {
+                "xField": "bucket"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "currencyUSD"
+                }
+            }
+        }
+    ]
+}

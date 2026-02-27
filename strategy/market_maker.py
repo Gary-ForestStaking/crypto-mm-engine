@@ -5,6 +5,7 @@ from typing import Dict, Deque
 from models.events import OrderBookUpdate, TradeEvent, QuoteIntent, MetricsEvent, FillEvent
 from bus.event_bus import EventBus
 from config.settings import settings
+from strategy.signals import SignalAggregator
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,9 @@ class MarketMakingStrategy:
         # EV Drift Conditional
         self.post_hit_drift: Dict[str, collections.deque] = {s: collections.deque(maxlen=50) for s in self.symbols}
         
+        # Signals Pipeline Matrix
+        self.signal_pipeline = SignalAggregator()
+        
         # Active Logic
         self.active_quotes: Dict[str, dict] = {}
 
@@ -90,6 +94,8 @@ class MarketMakingStrategy:
         Track aggressor flows specifically for trade_rate_level updates
         and post-fill toxicity mappings.
         """
+        self.signal_pipeline.on_trade(event)
+        
         # Updates global trade rate
         last_t = self.last_trade_ts.get(event.symbol, event.event_ts)
         self.last_trade_ts[event.symbol] = event.event_ts
@@ -179,6 +185,8 @@ class MarketMakingStrategy:
         if event.bid == 0.0 or event.ask == 0.0:
             return
             
+        self.signal_pipeline.on_order_book_update(event)
+            
         mid = (event.bid + event.ask) / 2.0
         self.mid_history[event.symbol].append(mid)
         self.last_mid[event.symbol] = mid
@@ -209,6 +217,14 @@ class MarketMakingStrategy:
         bid_queue_ahead = event.bid_size if bid_price >= event.bid else event.bid_size * 2
         ask_queue_ahead = event.ask_size if ask_price <= event.ask else event.ask_size * 2
         
+        # Fetch Modular Predictive Signals natively out of the pipeline
+        signals = self.signal_pipeline.get_composite_signals(
+             event.symbol, event.bid, event.ask, bid_queue_ahead, ask_queue_ahead
+        )
+        
+        # Fair Value shifted strictly by bounding [-1, 1] mapped composite 1.5 bps pull 
+        fv = fv * (1.0 + (signals['composite_directional'] * 0.00015))
+        
         # Probability Modeling & EVs
         if bid_queue_ahead > 0:
             bid_prob = 1 - math.exp(-trade_rate * horizon / bid_queue_ahead)
@@ -220,23 +236,24 @@ class MarketMakingStrategy:
         else:
             ask_prob = 1.0
             
-        # 4. Expected Edge Engine (Gross Edge vs Fair Value, not Mid)
+        # 4. Expected Edge Engine directly incorporating Modular Selection modeling predictors
         bid_gross = (fv - bid_price) / fv
         ask_gross = (ask_price - fv) / fv
         
-        bid_ev = bid_prob * (bid_gross - adv_drift - self.fee_cost)
-        ask_ev = ask_prob * (ask_gross - adv_drift - self.fee_cost)
+        bid_ev = bid_prob * (bid_gross - self.fee_cost) + signals['bid_adverse_penalty']
+        ask_ev = ask_prob * (ask_gross - self.fee_cost) + signals['ask_adverse_penalty']
 
         # Shift thresholds based on inventory limits mechanically
         adj_bid_threshold = self.min_edge_threshold * (1 + max(0, inv_ratio))
         adj_ask_threshold = self.min_edge_threshold * (1 + max(0, -inv_ratio))
 
-        # Size scaling utilizing Beta queue-aware dampeners + inventory skew
+        # Size scaling utilizing Beta queue-aware dampeners + inventory skew + Volatility Gating Constraint
         bid_sz_mult = 1.0 / (1.0 + self.beta_queue * bid_queue_ahead)
         ask_sz_mult = 1.0 / (1.0 + self.beta_queue * ask_queue_ahead)
         
-        bid_size = self.base_size * bid_sz_mult * max(0.01, (1 - inv_ratio))
-        ask_size = self.base_size * ask_sz_mult * max(0.01, (1 + inv_ratio))
+        gate_mult = signals['gating_multiplier']
+        bid_size = self.base_size * bid_sz_mult * max(0.01, (1 - inv_ratio)) * gate_mult
+        ask_size = self.base_size * ask_sz_mult * max(0.01, (1 + inv_ratio)) * gate_mult
         
         # Strict EV Gatekeeping 
         if bid_ev < adj_bid_threshold:
@@ -283,6 +300,13 @@ class MarketMakingStrategy:
             ("ev_ask_expected_edge", ask_ev),
             ("ev_bid_fill_prob", bid_prob),
             ("ev_ask_fill_prob", ask_prob),
+            ("sig_composite", signals['composite_directional']),
+            ("sig_gate", gate_mult),
+            ("sig_bid_adv_pen", signals['bid_adverse_penalty']),
+            ("sig_ask_adv_pen", signals['ask_adverse_penalty']),
+            ("sig_imb", signals['signal_imb']),
+            ("sig_slope", signals['signal_slope']),
+            ("sig_tfi", signals['signal_tfi']),
         ]
         
         for name, val in metrics:

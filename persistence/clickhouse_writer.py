@@ -23,7 +23,10 @@ class ClickHouseWriter:
             "fills": [],
             "strategy_metrics": [],
             "calibration_metrics": [],
-            "fills_metrics": []
+            "fills_metrics": [],
+            "signal_forward_stats": [],
+            "signal_regression_stats": [],
+            "signal_ic_stats": []
         }
         self.batch_size = settings.clickhouse_batch_size
         self.flush_interval = settings.clickhouse_flush_interval
@@ -40,10 +43,13 @@ class ClickHouseWriter:
         self.bus.subscribe(StrategySignal, self.on_strategy_signal)
         self.bus.subscribe(OrderIntent, self.on_order_intent)
         self.bus.subscribe(FillEvent, self.on_fill_event)
-        from models.events import StrategyMetricsPayload, CalibrationMetricsPayload, FillMetricsPayload
+        from models.events import StrategyMetricsPayload, CalibrationMetricsPayload, FillMetricsPayload, SignalForwardStatsPayload, SignalRegressionStatsPayload, SignalICStatsPayload
         self.bus.subscribe(StrategyMetricsPayload, self.on_strategy_metrics)
         self.bus.subscribe(CalibrationMetricsPayload, self.on_calibration_metrics)
         self.bus.subscribe(FillMetricsPayload, self.on_fills_metrics)
+        self.bus.subscribe(SignalForwardStatsPayload, self.on_signal_forward)
+        self.bus.subscribe(SignalRegressionStatsPayload, self.on_signal_regression)
+        self.bus.subscribe(SignalICStatsPayload, self.on_signal_ic)
 
     def _connect(self):
         try:
@@ -128,8 +134,34 @@ class ClickHouseWriter:
 
     async def on_fills_metrics(self, event):
         row = [datetime.datetime.fromtimestamp(event.event_ts / 1000.0), event.symbol, event.side, event.fill_price, 
-               event.fill_size, event.fair_value_at_fill, event.fee_paid, event.realized_edge_fractional, event.realized_pnl_usd]
+               event.fill_size, event.fair_value_at_fill, event.fee_paid, event.realized_edge_fractional, event.realized_pnl_usd,
+               event.sig_composite, event.sig_imb, event.sig_slope, event.sig_tfi]
         self._buffer["fills_metrics"].append(row)
+        self._drop_if_full()
+        await self._check_flush()
+
+    async def on_signal_forward(self, event):
+        row = [datetime.datetime.fromtimestamp(event.event_ts / 1000.0), event.symbol, event.signal_name, event.horizon_ms,
+               event.correlation, event.mean_forward_return, event.t_stat, event.sample_size]
+        self._buffer["signal_forward_stats"].append(row)
+        self._drop_if_full()
+        await self._check_flush()
+
+    async def on_signal_regression(self, event):
+        row = [datetime.datetime.fromtimestamp(event.event_ts / 1000.0), event.symbol, event.horizon_ms,
+               event.sig_imb_coef, event.sig_imb_se, event.sig_imb_t,
+               event.sig_slope_coef, event.sig_slope_se, event.sig_slope_t,
+               event.sig_tfi_coef, event.sig_tfi_se, event.sig_tfi_t,
+               event.sig_bid_adv_coef, event.sig_bid_adv_se, event.sig_bid_adv_t,
+               event.sig_ask_adv_coef, event.sig_ask_adv_se, event.sig_ask_adv_t]
+        self._buffer["signal_regression_stats"].append(row)
+        self._drop_if_full()
+        await self._check_flush()
+
+    async def on_signal_ic(self, event):
+        row = [datetime.datetime.fromtimestamp(event.event_ts / 1000.0), event.symbol, event.signal_name, event.horizon_ms,
+               event.rolling_ic, event.rolling_mean_ic]
+        self._buffer["signal_ic_stats"].append(row)
         self._drop_if_full()
         await self._check_flush()
 
@@ -190,7 +222,18 @@ class ClickHouseWriter:
                 if cache_copy["fills_metrics"]:
                     self.client.insert("fills_metrics", cache_copy["fills_metrics"], 
                         column_names=["ts", "symbol", "side", "fill_price", "fill_size", "fair_value_at_fill", 
-                                      "fee_paid", "realized_edge_fractional", "realized_pnl_usd"])
+                                      "fee_paid", "realized_edge_fractional", "realized_pnl_usd", "sig_composite", "sig_imb", "sig_slope", "sig_tfi"])
+                if cache_copy["signal_forward_stats"]:
+                    self.client.insert("signal_forward_stats", cache_copy["signal_forward_stats"],
+                        column_names=["ts", "symbol", "signal_name", "horizon_ms", "correlation", "mean_forward_return", "t_stat", "sample_size"])
+                if cache_copy["signal_regression_stats"]:
+                    self.client.insert("signal_regression_stats", cache_copy["signal_regression_stats"],
+                        column_names=["ts", "symbol", "horizon_ms", "sig_imb_coef", "sig_imb_se", "sig_imb_t",
+                                      "sig_slope_coef", "sig_slope_se", "sig_slope_t", "sig_tfi_coef", "sig_tfi_se", "sig_tfi_t",
+                                      "sig_bid_adv_coef", "sig_bid_adv_se", "sig_bid_adv_t", "sig_ask_adv_coef", "sig_ask_adv_se", "sig_ask_adv_t"])
+                if cache_copy["signal_ic_stats"]:
+                    self.client.insert("signal_ic_stats", cache_copy["signal_ic_stats"],
+                        column_names=["ts", "symbol", "signal_name", "horizon_ms", "rolling_ic", "rolling_mean_ic"])
 
             await asyncio.to_thread(blocking_inserts)
 

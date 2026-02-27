@@ -128,3 +128,45 @@ class FillMetricsPayload(BaseEvent):
     fee_paid: float
     realized_edge_fractional: float
     realized_pnl_usd: float
+    sig_composite: float
+    sig_imb: float
+    sig_slope: float
+    sig_tfi: float
+
+class SignalForwardStatsPayload(BaseEvent):
+    event_ts: int = Field(default_factory=current_milli_time)
+    symbol: str
+    signal_name: str
+    horizon_ms: int
+    correlation: float
+    mean_forward_return: float
+    t_stat: float
+    sample_size: int
+
+class SignalRegressionStatsPayload(BaseEvent):
+    event_ts: int = Field(default_factory=current_milli_time)
+    symbol: str
+    horizon_ms: int
+    sig_imb_coef: float
+    sig_imb_se: float
+    sig_imb_t: float
+    sig_slope_coef: float
+    sig_slope_se: float
+    sig_slope_t: float
+    sig_tfi_coef: float
+    sig_tfi_se: float
+    sig_tfi_t: float
+    sig_bid_adv_coef: float
+    sig_bid_adv_se: float
+    sig_bid_adv_t: float
+    sig_ask_adv_coef: float
+    sig_ask_adv_se: float
+    sig_ask_adv_t: float
+
+class SignalICStatsPayload(BaseEvent):
+    event_ts: int = Field(default_factory=current_milli_time)
+    symbol: str
+    signal_name: str
+    horizon_ms: int
+    rolling_ic: float
+    rolling_mean_ic: float

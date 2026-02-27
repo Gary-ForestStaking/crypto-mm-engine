@@ -88,7 +88,7 @@ class MetricsTracker:
         await self._check_rolling_window()
 
     async def _realize_fill_pnl(self, fill_data: tuple, current_mid: float):
-        ts, symbol, side, fill_price, fill_size, fv_at_fill, expected_edge, prob_at_fill = fill_data
+        ts, symbol, side, fill_price, fill_size, fv_at_fill, expected_edge, prob_at_fill, sig_composite, sig_imb, sig_slope, sig_tfi = fill_data
         
         if fv_at_fill == 0.0:
             fv_at_fill = current_mid
@@ -116,7 +116,11 @@ class MetricsTracker:
             fair_value_at_fill=fv_at_fill,
             fee_paid=fee_paid,
             realized_edge_fractional=gross_edge,
-            realized_pnl_usd=realized_pnl_usd
+            realized_pnl_usd=realized_pnl_usd,
+            sig_composite=sig_composite,
+            sig_imb=sig_imb,
+            sig_slope=sig_slope,
+            sig_tfi=sig_tfi
         ))
         
         self.stats['realized_gross_edge'].update(gross_edge)
@@ -152,9 +156,15 @@ class MetricsTracker:
         ev_at_fill = self.last_ev[fill.symbol].get('ev_bid_expected_edge') if fill.side == "BUY" else self.last_ev[fill.symbol].get('ev_ask_expected_edge')
         prob = self.last_ev[fill.symbol].get('ev_bid_fill_prob') if fill.side == "BUY" else self.last_ev[fill.symbol].get('ev_ask_fill_prob')
         
-        # Append tuple correctly isolated: (ts, smb, side, px, sz, fv, ev, prb)
+        sig_composite = self.last_ev[fill.symbol].get('sig_composite', 0.0)
+        sig_imb = self.last_ev[fill.symbol].get('sig_imb', 0.0)
+        sig_slope = self.last_ev[fill.symbol].get('sig_slope', 0.0)
+        sig_tfi = self.last_ev[fill.symbol].get('sig_tfi', 0.0)
+        
+        # Append tuple correctly isolated: (ts, smb, side, px, sz, fv, ev, prb, sigs...)
         self.pending_fills.append((
-            time.time() * 1000, fill.symbol, fill.side, fill.price, fill.size, fv_at_fill, ev_at_fill, prob
+            time.time() * 1000, fill.symbol, fill.side, fill.price, fill.size, fv_at_fill, ev_at_fill, prob,
+            sig_composite, sig_imb, sig_slope, sig_tfi
         ))
 
     async def on_strategy_signal(self, signal: StrategySignal):
@@ -170,7 +180,7 @@ class MetricsTracker:
         # Listen natively to FV and EV mapping channels from MM.py
         if event.metric_name == 'fv_fair_value':
             self.current_fv[symbol] = event.value
-        elif 'expected_edge' in event.metric_name or 'fill_prob' in event.metric_name:
+        elif 'expected_edge' in event.metric_name or 'fill_prob' in event.metric_name or event.metric_name in ['sig_composite', 'sig_imb', 'sig_slope', 'sig_tfi', 'sig_bid_adv_pen', 'sig_ask_adv_pen']:
             self.last_ev[symbol][event.metric_name] = event.value
             
         if 'expected_edge' in event.metric_name:

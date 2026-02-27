@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     mm_drift_gamma: float = Field(default=0.01) # scale imbalance into drift
     mm_ema_alpha: float = Field(default=0.1) # hysteresis smoothing multiplier
 
+    # Kill Switch Test Mode
+    mm_active_signal: str = Field(default="ALL") # Options: ALL, sig_imb, sig_slope, sig_tfi, sig_bid_adv, sig_ask_adv
+
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
 # Singleton instance
