@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     risk_consecutive_errors_limit: int = Field(default=3)
     
     # Market Making Strategy Settings
-    mm_base_size: float = Field(default=0.0)
+    mm_base_size: float = Field(default=1.0)
     mm_base_width_k1: float = Field(default=2.0)
     mm_imbalance_k2: float = Field(default=0.5)
     mm_inventory_k3: float = Field(default=1.0)
