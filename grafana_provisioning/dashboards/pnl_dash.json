@@ -1,0 +1,487 @@
+{
+    "id": null,
+    "uid": "pnl_dash",
+    "title": "Realized Profitability Analytics",
+    "tags": [
+        "templated",
+        "pnl"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "5s",
+    "templating": {
+        "list": [
+            {
+                "name": "symbol",
+                "type": "query",
+                "datasource": "ClickHouse",
+                "query": "SELECT DISTINCT symbol FROM strategy_metrics",
+                "refresh": 1
+            }
+        ]
+    },
+    "panels": [
+        {
+            "type": "stat",
+            "title": "Profitability Statistics & Risk Constraints",
+            "gridPos": {
+                "h": 4,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "WITH\nbase AS (\n    SELECT realized_pnl_usd\n    FROM strategy_db.fills_metrics\n    WHERE symbol = '$symbol'\n    AND $__timeFilter(ts)\n),\ntotals AS (\n    SELECT\n        coalesce(count(), 0) AS n,\n        coalesce(sum(realized_pnl_usd), 0) AS total_pnl,\n        coalesce(sumIf(realized_pnl_usd, realized_pnl_usd > 0), 0) AS gross_profit,\n        coalesce(sumIf(realized_pnl_usd, realized_pnl_usd < 0), 0) AS gross_loss,\n        coalesce(countIf(realized_pnl_usd > 0), 0) AS wins,\n        if(isNaN(avg(realized_pnl_usd)), 0, avg(realized_pnl_usd)) AS mean_pnl,\n        if(isNaN(quantile(0.5)(realized_pnl_usd)), 0, quantile(0.5)(realized_pnl_usd)) AS median_pnl,\n        coalesce(min(realized_pnl_usd), 0) AS max_single_loss,\n        if(isNaN(quantile(0.01)(realized_pnl_usd)), 0, quantile(0.01)(realized_pnl_usd)) AS q01,\n        if(isNaN(quantile(0.95)(realized_pnl_usd)), 0, quantile(0.95)(realized_pnl_usd)) AS q95\n    FROM base\n),\nworst5 AS (\n    SELECT coalesce(sum(realized_pnl_usd), 0) AS worst5_sum\n    FROM (\n        SELECT realized_pnl_usd\n        FROM base\n        ORDER BY realized_pnl_usd ASC\n        LIMIT 5\n    )\n),\nworst1pct AS (\n    SELECT if(isNaN(avg(realized_pnl_usd)), 0, avg(realized_pnl_usd)) AS worst1pct_avg\n    FROM base\n    WHERE realized_pnl_usd <= (\n        SELECT q01 FROM totals\n    )\n),\ntop5pct AS (\n    SELECT coalesce(sum(realized_pnl_usd), 0) AS top5pct_sum\n    FROM base\n    WHERE realized_pnl_usd >= (\n        SELECT q95 FROM totals\n    )\n)\nSELECT\n    totals.mean_pnl AS `Mean PnL`,\n    totals.median_pnl AS `Median PnL`,\n    if(abs(totals.gross_loss) = 0, 0, totals.gross_profit / abs(totals.gross_loss)) AS `Profit Factor`,\n    if(totals.n = 0, 0, totals.wins / totals.n) AS `Win Rate`,\n    totals.max_single_loss AS `Max Single Loss`,\n    if(totals.total_pnl = 0, 0, top5pct.top5pct_sum / totals.total_pnl) AS `Top 5% Contribution`,\n    worst1pct.worst1pct_avg AS `Top 1% Worst Trades Avg`,\n    if(totals.total_pnl = 0, 0, worst5.worst5_sum / totals.total_pnl) AS `Worst 5 Trades Contribution`\nFROM totals, worst5, worst1pct, top5pct\nLIMIT 1"
+                }
+            ],
+            "options": {
+                "reduceOptions": {
+                    "values": false,
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": ""
+                },
+                "orientation": "horizontal",
+                "textMode": "auto",
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "gray",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Mean PnL"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "currencyUSD"
+                            },
+                            {
+                                "id": "custom.valuedisplay",
+                                "value": "auto"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Median PnL"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "currencyUSD"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Max Single Loss"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "currencyUSD"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Win Rate"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 0.5
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Profit Factor"
+                        },
+                        "properties": [
+                            {
+                                "id": "decimals",
+                                "value": 2
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 1.0
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Top 5% Contribution"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Top 1% Worst Trades Avg"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "currencyUSD"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Worst 5 Trades Contribution"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Cumulative PnL Curve (USD)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 4
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT ts AS time, sum(realized_pnl_usd) OVER (ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS \"Cumulative PnL\" FROM fills_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts) ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "spanNulls": true
+                    },
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Drawdown Curve (USD)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 4
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "WITH pnl AS (     SELECT ts, sum(realized_pnl_usd) OVER (ORDER BY ts) AS cumulative_pnl     FROM fills_metrics     WHERE symbol = '$symbol' AND $__timeFilter(ts) ) SELECT ts AS time, cumulative_pnl - max(cumulative_pnl) OVER (ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS \"Drawdown\" FROM pnl ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "fillOpacity": 20,
+                        "spanNulls": true
+                    },
+                    "unit": "currencyUSD",
+                    "color": {
+                        "mode": "fixed",
+                        "fixedColor": "red"
+                    }
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "PnL Per Fill (USD)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 12
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT ts AS time, realized_pnl_usd AS \"Realized Fill PnL\" FROM fills_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts) ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars"
+                    },
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Rolling Profit (5 min buckets)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 12
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 MINUTE) AS time, sum(realized_pnl_usd) AS \"Rolling PnL\" FROM fills_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts) GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars",
+                        "spanNulls": true
+                    },
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Rolling Pseudo-Sharpe (1m sample agg over global window)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 20
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT bucket AS time, if(stddevPop(pnl) > 0, avg(pnl) / stddevPop(pnl), 0) AS \"Rolling Sharpe\" FROM (     SELECT     toStartOfInterval(ts, INTERVAL 1 MINUTE) AS bucket,     sum(realized_pnl_usd) AS pnl     FROM fills_metrics     WHERE symbol = '$symbol' AND $__timeFilter(ts)     GROUP BY bucket ) GROUP BY bucket ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "spanNulls": true
+                    }
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Fill Count Velocity (Per Minute)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 20
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 1 MINUTE) AS time, count() AS \"Fills\" FROM fills_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts) GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "spanNulls": true,
+                        "drawStyle": "bars"
+                    },
+                    "unit": "none"
+                }
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "PnL by Volatility Regime",
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 28
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "SELECT s.regime AS bucket, sum(f.realized_pnl_usd) AS \"Total PnL\", avg(f.realized_pnl_usd) AS \"Avg PnL/Fill\" FROM fills_metrics f ASOF INNER JOIN strategy_metrics s ON f.symbol = s.symbol AND f.ts >= s.ts WHERE f.symbol = '$symbol' AND $__timeFilter(f.ts) GROUP BY bucket ORDER BY bucket"
+                }
+            ],
+            "options": {
+                "xField": "bucket"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "axisPlacement": "left"
+                    },
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "PnL by Queue Ahead Size",
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 28
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "SELECT toString(intDiv(s.queue_ahead_estimate, 5) * 5) AS bucket, sum(f.realized_pnl_usd) AS \"Total PnL\" FROM fills_metrics f ASOF INNER JOIN strategy_metrics s ON f.symbol = s.symbol AND f.ts >= s.ts WHERE f.symbol = '$symbol' AND $__timeFilter(f.ts) GROUP BY bucket ORDER BY toFloat64(bucket)"
+                }
+            ],
+            "options": {
+                "xField": "bucket"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "axisPlacement": "left"
+                    },
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "PnL by Drift Magnitude (bps at fill)",
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 28
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "SELECT toString(intDiv(abs(s.fair_value - s.mid) / s.mid * 100000, 1) * 1.0) AS bucket, sum(f.realized_pnl_usd) AS \"Total PnL\" FROM fills_metrics f ASOF INNER JOIN strategy_metrics s ON f.symbol = s.symbol AND f.ts >= s.ts WHERE f.symbol = '$symbol' AND $__timeFilter(f.ts) GROUP BY bucket ORDER BY toFloat64(bucket)"
+                }
+            ],
+            "options": {
+                "xField": "bucket"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "axisPlacement": "left"
+                    },
+                    "unit": "currencyUSD"
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Toxic Fill Detector (Frequency Per Hour)",
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 36
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "WITH (SELECT median(realized_edge_fractional) FROM fills_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts)) AS m_edge SELECT toStartOfInterval(ts, INTERVAL 1 HOUR) AS time, count() AS \"Toxic Fills Detected\" FROM fills_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts) AND realized_edge_fractional < -5 * abs(m_edge) GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars",
+                        "spanNulls": true
+                    },
+                    "unit": "none",
+                    "color": {
+                        "mode": "fixed",
+                        "fixedColor": "dark-red"
+                    }
+                }
+            }
+        }
+    ]
+}

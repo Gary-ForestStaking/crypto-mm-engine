@@ -1,0 +1,117 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "Strategy Engine Alerts",
+      "folder": "Strategy Alerts",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "ev_bias_leak",
+          "title": "EV Bias Leakage Detected",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {"from": 300, "to": 0},
+              "datasourceUid": "PDEE91DDB90597936",
+              "model": {"format": 1, "rawSql": "SELECT ts, ev_bias FROM calibration_metrics WHERE $__timeFilter(ts)"}
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["A"]}, "reducer": {"params": [], "type": "mean"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "reducer": "mean", "type": "reduce"}
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [-0.0002], "type": "lt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$B < -0.0002", "type": "math"}
+            }
+          ],
+          "noDataState": "NoData", "execErrState": "Error", "for": "5m",
+          "annotations": {"description": "EV bias is trailing continuously negative, expected value has broken down."},
+          "labels": {"severity": "critical"}
+        },
+        {
+          "uid": "inventory_skew",
+          "title": "Maximum Inventory Skew Breached",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {"from": 60, "to": 0},
+              "datasourceUid": "PDEE91DDB90597936",
+              "model": {"format": 1, "rawSql": "SELECT ts, inventory_ratio FROM strategy_metrics WHERE $__timeFilter(ts)"}
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["A"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "reducer": "last", "type": "reduce"}
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [0.8], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "abs($B) > 0.8", "type": "math"}
+            }
+          ],
+          "noDataState": "NoData", "execErrState": "Error", "for": "5m",
+          "annotations": {"description": "Absolute inventory ratio > 0.8. Maximum delta exposure."},
+          "labels": {"severity": "critical"}
+        },
+        {
+          "uid": "fill_rate_error",
+          "title": "Realized Fill Rate Deviation",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {"from": 300, "to": 0},
+              "datasourceUid": "PDEE91DDB90597936",
+              "model": {"format": 1, "rawSql": "SELECT ts, abs(realized_fill_rate - predicted_fill_prob) as err FROM calibration_metrics WHERE $__timeFilter(ts)"}
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["A"]}, "reducer": {"params": [], "type": "mean"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "reducer": "mean", "type": "reduce"}
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [0.15], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$B > 0.15", "type": "math"}
+            }
+          ],
+          "noDataState": "NoData", "execErrState": "Error", "for": "5m",
+          "annotations": {"description": "Realized fill rate deviating materially from probabilistic estimator."},
+          "labels": {"severity": "warning"}
+        },
+        {
+          "uid": "adverse_drift_spike",
+          "title": "Adverse Drift Spike",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {"from": 1800, "to": 0},
+              "datasourceUid": "PDEE91DDB90597936",
+              "model": {"format": 1, "rawSql": "SELECT now() as ts, if(avgIf(adverse_drift_mean, ts < now() - INTERVAL 5 MINUTE) > 0, avgIf(adverse_drift_mean, ts >= now() - INTERVAL 5 MINUTE) / avgIf(adverse_drift_mean, ts < now() - INTERVAL 5 MINUTE), 0) as ratio FROM calibration_metrics WHERE ts >= now() - INTERVAL 30 MINUTE"}
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["A"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "reducer": "last", "type": "reduce"}
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {"conditions": [{"evaluator": {"params": [3], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$B > 3", "type": "math"}
+            }
+          ],
+          "noDataState": "NoData", "execErrState": "Error", "for": "0m",
+          "annotations": {"description": "Adverse drift spiked 3X above 30-minute baseline"},
+          "labels": {"severity": "critical"}
+        }
+      ]
+    }
+  ]
+}

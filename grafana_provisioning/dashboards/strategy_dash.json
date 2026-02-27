@@ -1,0 +1,256 @@
+{
+    "id": null,
+    "uid": "strategy_dash",
+    "title": "Strategy Engine Analytics",
+    "tags": [
+        "templated"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "5s",
+    "panels": [
+        {
+            "type": "timeseries",
+            "title": "Fair Value Matrix",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 SECOND) AS time, avg(mid) AS \"Mid\", avg(microprice) AS \"Microprice\", avg(fair_value) AS \"Fair Value\", avg(fair_value - mid) * 10000 AS \"FV Shift (bps)\", avg(microprice - mid) * 10000 AS \"Micro Shift (bps)\" FROM strategy_metrics WHERE $__timeFilter(ts) AND symbol = '$symbol' GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "spanNulls": true,
+                        "axisPlacement": "auto"
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "FV Shift (bps)"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.axisPlacement",
+                                "value": "right"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Micro Shift (bps)"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.axisPlacement",
+                                "value": "right"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Expected vs Realized Edge",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 SECOND) AS time, avg(expected_edge_mean) AS \"Expected Net Edge\", avg(realized_effective_edge_mean) AS \"Realized Edge\" FROM calibration_metrics WHERE $__timeFilter(ts) AND symbol IN ('GLOBAL_AGG', '$symbol') GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "spanNulls": true
+                    }
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Fill Probability Accuracy",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 10 SECOND) AS time, avg(predicted_fill_prob) AS \"Predicted Prob\", avg(realized_fill_rate) AS \"Realized Rate\" FROM calibration_metrics WHERE $__timeFilter(ts) AND symbol IN ('GLOBAL_AGG', '$symbol') GROUP BY time ORDER BY time"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "spanNulls": true
+                    }
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "EV Bias Leakage (Rolling Mean & StdDev)",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 1,
+                    "rawSql": "SELECT bucket AS time, avg(ev_bias) OVER w AS \"Rolling Mean\", stddevPop(ev_bias) OVER w AS \"Rolling StdDev\" FROM (    SELECT     toStartOfInterval(ts, INTERVAL 5 SECOND) AS bucket,     avg(ev_bias) AS ev_bias     FROM calibration_metrics     WHERE symbol IN ('GLOBAL_AGG', '$symbol') AND $__timeFilter(ts)     GROUP BY bucket) WINDOW w AS (ORDER BY bucket ROWS BETWEEN 12 PRECEDING AND CURRENT ROW) ORDER BY bucket"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "spanNulls": true
+                    }
+                }
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "EV Bias Distribution",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "SELECT round(ev_bias, 6) AS bucket, count() AS count FROM calibration_metrics WHERE symbol IN ('GLOBAL_AGG', '$symbol') AND $__timeFilter(ts) GROUP BY bucket ORDER BY bucket"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "axisPlacement": "left"
+                    }
+                }
+            },
+            "options": {
+                "xField": "bucket"
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "Expected Edge Distribution",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "SELECT round(expected_edge, 5) AS bucket, count() AS count FROM strategy_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts) GROUP BY bucket ORDER BY bucket"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "axisPlacement": "left"
+                    }
+                }
+            },
+            "options": {
+                "xField": "bucket"
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "Realized Edge Distribution",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "SELECT round(realized_effective_edge_mean, 6) AS bucket, count() AS count FROM calibration_metrics WHERE symbol IN ('GLOBAL_AGG', '$symbol') AND $__timeFilter(ts) GROUP BY bucket ORDER BY bucket"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "axisPlacement": "left"
+                    }
+                }
+            },
+            "options": {
+                "xField": "bucket"
+            }
+        },
+        {
+            "type": "barchart",
+            "title": "Queue Ahead Distribution",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "datasource": "ClickHouse",
+                    "format": 2,
+                    "rawSql": "SELECT round(queue_ahead_estimate, 3) AS bucket, count() AS count FROM strategy_metrics WHERE symbol = '$symbol' AND $__timeFilter(ts) GROUP BY bucket ORDER BY bucket"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "axisPlacement": "left"
+                    }
+                }
+            },
+            "options": {
+                "xField": "bucket"
+            }
+        }
+    ],
+    "templating": {
+        "list": [
+            {
+                "name": "symbol",
+                "type": "query",
+                "datasource": "ClickHouse",
+                "query": "SELECT DISTINCT symbol FROM strategy_metrics",
+                "refresh": 1
+            }
+        ]
+    }
+}
