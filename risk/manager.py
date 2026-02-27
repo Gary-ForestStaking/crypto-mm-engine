@@ -77,9 +77,7 @@ class RiskManager:
              await self.bus.publish(intent)
 
     async def on_strategy_signal(self, signal: StrategySignal):
-            self.open_orders.add(intent_id)
-            logger.info(f"Risk approved intent: {intent}")
-            await self.bus.publish(intent)
+        pass
 
     async def on_fill(self, fill: FillEvent):
         if fill.intent_id in self.open_orders:

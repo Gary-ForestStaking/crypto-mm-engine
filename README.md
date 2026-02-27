@@ -80,4 +80,4 @@ python main.py
 
 ## ⚠️ Disclaimer
 
-This codebase interacts with real financial market APIs. It is primarily built to measure and research specific micro-structure events, and any active configurations scaling sizes > `0.0` should be thoroughly tested on Testnets before committing real capital.
+This codebase interacts with real financial market APIs. **This software is for educational purposes only and is NOT financial advice.** It is primarily built to measure and research specific micro-structure events, and any active configurations scaling sizes > `0.0` should be thoroughly tested on Testnets before committing real capital.

@@ -1,11 +1,27 @@
+# Environments
 venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
 env/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Logs and databases
+*.log
+logs.txt
 clickhouse_data/
 grafana_data/
-logs.txt
-*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
